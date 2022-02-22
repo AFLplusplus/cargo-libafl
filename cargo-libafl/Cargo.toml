@@ -8,6 +8,11 @@ readme = "../README.md"
 repository = "https://github.com/AFLplusplus/cargo-libafl"
 categories = ["development-tools::testing"]
 edition = "2021"
+include = [
+    "cargo-libafl-runtime",
+    "src",
+    "Cargo.toml"
+]
 
 [build-dependencies]
 rustc_version = "0.4"
@@ -21,4 +26,3 @@ toml = "0.5.5"
 cargo-binutils = "0.3.3"
 rustc_version = "0.4"
 xdg = "2.1"
-

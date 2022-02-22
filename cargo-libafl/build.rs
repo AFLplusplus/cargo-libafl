@@ -7,6 +7,10 @@ fn main() {
     println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap());
     println!("cargo:rerun-if-changed=build.rs");
 
+    if env::var("PUBLISH_ON_CRATES").is_ok() {
+        return;
+    }
+
     let rt_path = Path::new("cargo-libafl-runtime");
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let out_dir = out_dir.to_string_lossy().to_string();
