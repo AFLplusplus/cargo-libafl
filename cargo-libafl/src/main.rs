@@ -26,7 +26,7 @@ trait RunCommand {
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
     arg(structopt::clap::Arg::with_name("dummy")
-        .possible_value("fuzz")
+        .possible_value("libafl")
         .required(false)
         .hidden(true)),
 )]
