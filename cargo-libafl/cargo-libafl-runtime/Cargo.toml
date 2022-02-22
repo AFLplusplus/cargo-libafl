@@ -1,6 +1,6 @@
 [package]
 name = "cargo-libafl-runtime"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Andrea Fioraldi <andreafioraldi@gmail.com>"]
 license = "MIT OR Apache-2.0"
 description = "The runtime lib for cargo-libafl"
