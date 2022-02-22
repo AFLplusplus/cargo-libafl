@@ -24,8 +24,8 @@ use libafl::{
     },
     events::EventConfig,
     executors::{inprocess::InProcessExecutor, ExitKind, TimeoutExecutor},
-    feedback_or,
-    feedbacks::{CrashFeedback, MapFeedbackState, MaxMapFeedback, TimeFeedback, TimeoutFeedback},
+    feedback_and_fast, feedback_or,
+    feedbacks::{CrashFeedback, MapFeedbackState, MaxMapFeedback, NewHashFeedback, TimeFeedback},
     fuzzer::{Fuzzer, StdFuzzer},
     generators::RandBytesGenerator,
     inputs::{BytesInput, HasTargetBytes},
@@ -35,7 +35,7 @@ use libafl::{
         token_mutations::{I2SRandReplace, Tokens},
         StdMOptMutator,
     },
-    observers::{HitcountsMapObserver, MultiMapObserver, TimeObserver},
+    observers::{BacktraceObserver, HitcountsMapObserver, MultiMapObserver, TimeObserver},
     stages::{
         calibrate::CalibrationStage,
         power::{PowerMutationalStage, PowerSchedule},
@@ -59,8 +59,8 @@ fn timeout_from_millis_str(time: &str) -> Result<Duration, Error> {
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "StdFuzzer",
-    about = "StdFuzzer is the reference implementation of a generic bit-level fuzzer with LibAFL",
+    name = "cargo-libafl",
+    about = "A `cargo` wrapper to fuzz Rust code with `LibAFL`",
     author = "Andrea Fioraldi <andreafioraldi@gmail.com>"
 )]
 struct Opt {
@@ -187,6 +187,14 @@ pub fn main() {
         let cmplog = unsafe { &mut CMPLOG_MAP };
         let cmplog_observer = CmpLogObserver::new("cmplog", cmplog, true);
 
+        // Create a stacktrace observer
+        let mut backtrace = None;
+        let backtrace_observer = BacktraceObserver::new(
+            "BacktraceObserver",
+            &mut backtrace,
+            libafl::observers::HarnessType::InProcess,
+        );
+
         // The state of the edges feedback.
         let feedback_state = MapFeedbackState::with_observer(&edges_observer);
 
@@ -200,7 +208,10 @@ pub fn main() {
         );
 
         // A feedback to choose if an input is a solution or not
-        let objective = feedback_or!(CrashFeedback::new(), TimeoutFeedback::new());
+        let objective = feedback_and_fast!(
+            CrashFeedback::new(),
+            NewHashFeedback::new_with_observer("NewHashFeedback", &backtrace_observer)
+        );
 
         // If not restarting, create a State from scratch
         let mut state = state.unwrap_or_else(|| {

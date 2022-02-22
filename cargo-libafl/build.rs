@@ -11,8 +11,10 @@ mod common;
 fn main() {
     println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap());
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=cargo-libafl-runtime/runtime.rs");
+    println!("cargo:rerun-if-changed=cargo-libafl-runtime/template.Cargo.toml");
 
-    if env::var("PUBLISH_ON_CRATES").is_ok() {
+    if env::var("PUBLISH_ON_CRATES").is_ok() || env::var("DOCS_RS").is_ok() {
         return;
     }
 
