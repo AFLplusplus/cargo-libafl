@@ -29,7 +29,7 @@ use libafl::{
     fuzzer::{Fuzzer, StdFuzzer},
     generators::RandBytesGenerator,
     inputs::{BytesInput, HasTargetBytes},
-    monitors::MultiMonitor,
+    monitors::tui::TuiMonitor,
     mutators::{
         scheduled::{havoc_mutations, tokens_mutations, StdScheduledMutator},
         token_mutations::{I2SRandReplace, Tokens},
@@ -50,7 +50,7 @@ use libafl_targets::{CmpLogObserver, CMPLOG_MAP, COUNTERS_MAPS};
 //#[cfg(target_os = "linux")]
 //use libafl_targets::autotokens;
 
-// const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Parses a millseconds int into a [`Duration`], used for commandline arg parsing
 fn timeout_from_millis_str(time: &str) -> Result<Duration, Error> {
@@ -76,10 +76,10 @@ struct Opt {
     #[structopt(
         short = "p",
         long,
-        help = "Choose the broker TCP port, default is 1337",
+        help = "Choose the broker TCP port, otherwise pick one at random",
         name = "PORT"
     )]
-    broker_port: u16,
+    broker_port: Option<u16>,
 
     #[structopt(
         parse(try_from_str),
@@ -128,6 +128,13 @@ struct Opt {
         multiple = true
     )]
     tokens: Vec<PathBuf>,
+
+    #[structopt(
+        long,
+        help = "Disable unicode in the UI (for old terminals)",
+        name = "DISABLE_UNICODE"
+    )]
+    disable_unicode: bool,
 }
 
 extern "C" {
@@ -150,7 +157,11 @@ pub fn main() {
     let opt = Opt::from_args();
 
     let cores = opt.cores;
-    let broker_port = opt.broker_port;
+    let broker_port = opt.broker_port.unwrap_or_else(|| {
+        let port = portpicker::pick_unused_port().expect("No ports free");
+        println!("Picking the free port {}", port);
+        port
+    });
     let remote_broker_addr = opt.remote_broker_addr;
     let input_dirs = opt.input;
     let output_dir = opt.output;
@@ -162,7 +173,7 @@ pub fn main() {
 
     let shmem_provider = StdShMemProvider::new().expect("Failed to init shared memory");
 
-    let monitor = MultiMonitor::new(|s| println!("{}", s));
+    let monitor = TuiMonitor::new(format!("cargo-libafl v{}", VERSION), !opt.disable_unicode);
 
     let mut run_client = |state: Option<StdState<_, _, _, _, _>>, mut mgr, _core_id| {
         // Create an observation channel using the coverage map

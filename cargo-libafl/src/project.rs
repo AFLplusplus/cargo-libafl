@@ -419,13 +419,14 @@ impl FuzzProject {
             cmd.arg(arg);
         }
 
-        /*if !run.corpus.is_empty() {
+        if !run.corpus.is_empty() {
             for corpus in &run.corpus {
+                cmd.arg("--input");
                 cmd.arg(corpus);
             }
-        } else {
-            cmd.arg(self.corpus_for(&run.target)?);
-        }*/
+        } /*else {
+              cmd.arg(self.corpus_for(&run.target)?);
+          }*/
 
         // When libfuzzer finds failing inputs, those inputs will end up in the
         // artifacts directory. To easily filter old artifacts from new ones,

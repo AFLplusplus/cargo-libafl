@@ -14,6 +14,9 @@ pub struct Run {
     /// Name of the fuzz target
     pub target: String,
 
+    /// Custom corpus directories or artifact files.
+    pub corpus: Vec<String>,
+
     #[structopt(flatten)]
     pub fuzz_dir_wrapper: FuzzDirWrapper,
 
