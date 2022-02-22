@@ -25,7 +25,10 @@ use libafl::{
     events::EventConfig,
     executors::{inprocess::InProcessExecutor, ExitKind, TimeoutExecutor},
     feedback_and_fast, feedback_or,
-    feedbacks::{CrashFeedback, MapFeedbackState, MaxMapFeedback, NewHashFeedback, TimeFeedback},
+    feedbacks::{
+        CrashFeedback, MapFeedbackState, MaxMapFeedback, NewHashFeedback, NewHashFeedbackState,
+        TimeFeedback,
+    },
     fuzzer::{Fuzzer, StdFuzzer},
     generators::RandBytesGenerator,
     inputs::{BytesInput, HasTargetBytes},
@@ -196,14 +199,15 @@ pub fn main() {
             libafl::observers::HarnessType::InProcess,
         );
 
-        // The state of the edges feedback.
-        let feedback_state = MapFeedbackState::with_observer(&edges_observer);
+        // The states of the feedbacks.
+        let edges_state = MapFeedbackState::with_observer(&edges_observer);
+        let hash_state = NewHashFeedbackState::<u64>::with_observer(&backtrace_observer);
 
         // Feedback to rate the interestingness of an input
         // This one is composed by two Feedbacks in OR
         let feedback = feedback_or!(
             // New maximization map feedback linked to the edges observer and the feedback state
-            MaxMapFeedback::new_tracking(&feedback_state, &edges_observer, true, false),
+            MaxMapFeedback::new_tracking(&edges_state, &edges_observer, true, false),
             // Time feedback, this one does not need a feedback state
             TimeFeedback::new_with_observer(&time_observer)
         );
@@ -226,7 +230,7 @@ pub fn main() {
                 OnDiskCorpus::new(output_dir.clone()).unwrap(),
                 // States of the feedbacks.
                 // They are the data related to the feedbacks that you want to persist in the State.
-                tuple_list!(feedback_state),
+                tuple_list!(edges_state, hash_state),
             )
         });
 
