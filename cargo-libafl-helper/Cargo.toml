@@ -1,0 +1,11 @@
+[package]
+name = "cargo-libafl-helper"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+arbitrary-derive = ["arbitrary/derive"]
+
+[dependencies]
+arbitrary = "1"
+once_cell = "1"

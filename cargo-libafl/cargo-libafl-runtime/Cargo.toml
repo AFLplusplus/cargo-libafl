@@ -1,0 +1,21 @@
+[package]
+name = "cargo-libafl-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "8a8de67c930602ae02e9368fd19508b8cf9d67b7" }
+libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "8a8de67c930602ae02e9368fd19508b8cf9d67b7", features = ["sancov_8bit", "sancov_cmplog"] }
+mimalloc = { version = "*", default-features = false }
+structopt = "0.3.25"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+debug = true
+
+[lib]
+crate-type = ["staticlib", "rlib"]

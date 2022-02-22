@@ -1,0 +1,14 @@
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+debug = true
+
+[workspace]
+members = [
+    "cargo-libafl",
+    "cargo-libafl-helper",
+]
+exclude = [
+    "cargo-libafl/cargo-libafl-runtime",
+]
