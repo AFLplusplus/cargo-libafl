@@ -4,10 +4,18 @@ This cargo utility is a replacement for (and a fork of) [cargo-fuzz](https://git
 
 The available features are still behind the original cargo-fuzz.
 
-## Build
+## Install
+
+You need a nightly compiler to use cargo-libafl.
 
 ```
-cargo build --release
+cargo install -f cargo-libafl 
+```
+
+## Use
+
+```
+cargo libafl --help
 ```
 
 #### License
