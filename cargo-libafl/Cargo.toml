@@ -1,6 +1,12 @@
 [package]
 name = "cargo-libafl"
 version = "0.1.0"
+authors = ["Andrea Fioraldi <andreafioraldi@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "A `cargo` wrapper to fuzz Rust code with `LibAFL`"
+readme = "../README.md"
+repository = "https://github.com/AFLplusplus/cargo-libafl"
+categories = ["development-tools::testing"]
 edition = "2021"
 
 [build-dependencies]

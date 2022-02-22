@@ -1,6 +1,12 @@
 [package]
 name = "cargo-libafl-helper"
 version = "0.1.0"
+authors = ["Andrea Fioraldi <andreafioraldi@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "The helper lib for cargo-libafl fuzzers"
+readme = "../README.md"
+repository = "https://github.com/AFLplusplus/cargo-libafl"
+categories = ["development-tools::testing"]
 edition = "2021"
 
 [features]
