@@ -145,6 +145,8 @@ extern "C" {
     fn rust_fuzzer_initialize();
 }
 
+static mut BACKTRACE: Option<u64> = None;
+
 /// The main fn, `no_mangle` as it is a C symbol
 #[no_mangle]
 pub fn main() {
@@ -188,10 +190,9 @@ pub fn main() {
         let cmplog_observer = CmpLogObserver::new("cmplog", cmplog, true);
 
         // Create a stacktrace observer
-        let mut backtrace = None;
         let backtrace_observer = BacktraceObserver::new(
             "BacktraceObserver",
-            &mut backtrace,
+            unsafe { &mut BACKTRACE },
             libafl::observers::HarnessType::InProcess,
         );
 
