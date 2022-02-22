@@ -1,4 +1,9 @@
-use std::{env, fs, path::Path, process::Command};
+use std::{
+    env, fs,
+    io::{Read, Write},
+    path::Path,
+    process::Command,
+};
 
 #[path = "src/common.rs"]
 mod common;
@@ -11,15 +16,44 @@ fn main() {
         return;
     }
 
-    let rt_path = Path::new("cargo-libafl-runtime");
+    let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    let manifest_dir = manifest_dir.to_string_lossy().to_string();
+    let manifest_path = Path::new(&manifest_dir);
+    let rt_path = manifest_path.join("cargo-libafl-runtime");
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let out_dir = out_dir.to_string_lossy().to_string();
     let out_path = Path::new(&out_dir);
 
+    let mut file = fs::File::open(&rt_path.join("template.Cargo.toml"))
+        .expect("Couldn't open template.Cargo.toml");
+    let mut template = String::new();
+    file.read_to_string(&mut template)
+        .expect("Couldn't read template.Cargo.toml");
+    drop(file);
+
+    template = template.replace(
+        "version = X",
+        &format!("version = \"{}\"", env!("CARGO_PKG_VERSION")),
+    );
+
+    let mut file =
+        fs::File::create(&out_path.join("Cargo.toml")).expect("Couldn't open Cargo.toml");
+    file.write_all(template.as_bytes())
+        .expect("Couldn't write Cargo.toml");
+    drop(file);
+
+    fs::create_dir_all(out_path.join("src")).expect("Failed to create the src dir");
+    fs::copy(
+        rt_path.join("runtime.rs"),
+        out_path.join("src").join("lib.rs"),
+    )
+    .expect("Couldn't copy runtime.rs");
+
     assert!(Command::new("cargo")
-        .current_dir(&rt_path)
+        .current_dir(&out_path)
         .env("CARGO_TARGET_DIR", out_path.join("rt"))
         .arg("build")
+        .arg(&format!("--manifest-path={}/Cargo.toml", out_dir))
         .arg("--release")
         .status()
         .unwrap()
