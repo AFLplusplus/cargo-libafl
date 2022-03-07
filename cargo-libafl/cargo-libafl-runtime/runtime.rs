@@ -5,7 +5,7 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 use core::time::Duration;
-use std::{env, net::SocketAddr, path::PathBuf};
+use std::{env, fs, net::SocketAddr, path::PathBuf};
 use structopt::StructOpt;
 
 use libafl::{
@@ -18,10 +18,7 @@ use libafl::{
         tuples::{tuple_list, Merge},
         AsSlice,
     },
-    corpus::{
-        Corpus, InMemoryCorpus, IndexesLenTimeMinimizerCorpusScheduler, OnDiskCorpus,
-        PowerQueueCorpusScheduler,
-    },
+    corpus::{CachedOnDiskCorpus, Corpus, OnDiskCorpus},
     events::EventConfig,
     executors::{inprocess::InProcessExecutor, ExitKind, TimeoutExecutor},
     feedback_and_fast, feedback_or,
@@ -39,6 +36,7 @@ use libafl::{
         StdMOptMutator,
     },
     observers::{BacktraceObserver, HitcountsMapObserver, MultiMapObserver, TimeObserver},
+    schedulers::{IndexesLenTimeMinimizerScheduler, PowerQueueScheduler},
     stages::{
         calibrate::CalibrationStage,
         power::{PowerMutationalStage, PowerSchedule},
@@ -174,6 +172,16 @@ pub fn main() {
     let timeout_ms = opt.timeout;
     // let cmplog_enabled = matches.is_present("cmplog");
 
+    if fs::create_dir(&output_dir).is_err() {
+        println!("Out dir at {:?} already exists.", &output_dir);
+        if !output_dir.is_dir() {
+            eprintln!("Out dir at {:?} is not a valid directory!", &output_dir);
+            return;
+        }
+    }
+    let crashes_dir = output_dir.join("crashes");
+    let corpus_dir = output_dir.join("corpus");
+
     println!("Workdir: {:?}", workdir.to_string_lossy().to_string());
 
     let shmem_provider = StdShMemProvider::new().expect("Failed to init shared memory");
@@ -224,10 +232,10 @@ pub fn main() {
                 // RNG
                 StdRand::with_seed(current_nanos()),
                 // Corpus that will be evolved, we keep it in memory for performance
-                InMemoryCorpus::new(),
+                CachedOnDiskCorpus::new(corpus_dir.clone(), 4096).unwrap(),
                 // Corpus in which we store solutions (crashes in this example),
                 // on disk so the user can get them after stopping the fuzzer
-                OnDiskCorpus::new(output_dir.clone()).unwrap(),
+                OnDiskCorpus::new(crashes_dir.clone()).unwrap(),
                 // States of the feedbacks.
                 // They are the data related to the feedbacks that you want to persist in the State.
                 tuple_list!(edges_state, hash_state),
@@ -263,8 +271,7 @@ pub fn main() {
         let power = PowerMutationalStage::new(mutator, PowerSchedule::FAST, &edges_observer);
 
         // A minimization+queue policy to get testcasess from the corpus
-        let scheduler =
-            IndexesLenTimeMinimizerCorpusScheduler::new(PowerQueueCorpusScheduler::new());
+        let scheduler = IndexesLenTimeMinimizerScheduler::new(PowerQueueScheduler::new());
 
         // A fuzzer with feedbacks and a corpus scheduler
         let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
