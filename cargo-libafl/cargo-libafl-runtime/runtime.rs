@@ -33,7 +33,7 @@ use libafl::{
         token_mutations::{I2SRandReplace, Tokens},
         StdMOptMutator,
     },
-    observers::{BacktraceObserver, HitcountsMapObserver, MultiMapObserver, TimeObserver},
+    observers::{BacktraceObserver, HitcountsIterableMapObserver, MultiMapObserver, TimeObserver},
     prelude::powersched::PowerSchedule,
     schedulers::{IndexesLenTimeMinimizerScheduler, PowerQueueScheduler},
     stages::{
@@ -188,7 +188,8 @@ pub fn main() {
     let mut run_client = |state: Option<StdState<_, _, _, _>>, mut mgr, _core_id| {
         // Create an observation channel using the coverage map
         let edges = unsafe { &mut COUNTERS_MAPS };
-        let edges_observer = HitcountsMapObserver::new(MultiMapObserver::new("edges", edges));
+        let edges_observer =
+            HitcountsIterableMapObserver::new(MultiMapObserver::new("edges", edges));
 
         // Create an observation channel to keep track of the execution time
         let time_observer = TimeObserver::new("time");
