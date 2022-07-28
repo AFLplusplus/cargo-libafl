@@ -4,16 +4,16 @@ use crate::{
     RunCommand,
 };
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::{self, Parser};
 
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, Parser)]
 pub struct Fmt {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub build: BuildOptions,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub fuzz_dir_wrapper: FuzzDirWrapper,
 
     /// Name of fuzz target

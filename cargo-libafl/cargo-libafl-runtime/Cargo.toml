@@ -17,7 +17,7 @@ libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "8d5699a3359
 libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "8d5699a33595ecaea9e61f1c103cfc88af16c9e2", features = ["sancov_8bit", "sancov_cmplog"] }
 mimalloc = { version = "*", default-features = false }
 portpicker = "0.1.1"
-clap = { version = "3.1", features = ["derive"] }
+clap = { version = "3.2", features = ["derive"] }
 
 [profile.release]
 lto = true

@@ -4,14 +4,14 @@ use crate::{
     RunCommand,
 };
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::{self, Parser};
 
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, Parser)]
 pub struct Coverage {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub build: BuildOptions,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub fuzz_dir_wrapper: FuzzDirWrapper,
 
     /// Name of the fuzz target
@@ -20,7 +20,7 @@ pub struct Coverage {
     /// Custom corpus directories or artifact files
     pub corpus: Vec<String>,
 
-    #[structopt(last(true))]
+    #[clap(last(true))]
     /// Additional libFuzzer arguments passed through to the binary
     pub args: Vec<String>,
 }

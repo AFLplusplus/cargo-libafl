@@ -1,15 +1,17 @@
-use crate::common;
-use crate::options::{self, BuildOptions, Sanitizer};
-use crate::utils::default_target;
+use crate::{
+    common,
+    options::{self, BuildOptions, Sanitizer},
+    utils::default_target,
+};
 use anyhow::{anyhow, bail, Context, Result};
-use std::collections::HashSet;
-use std::ffi::OsStr;
-use std::fmt::Write as FmtWrite;
-use std::io::Read;
-use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::{
-    env, ffi, fs,
+    collections::HashSet,
+    env, ffi,
+    ffi::OsStr,
+    fmt::Write as FmtWrite,
+    fs,
+    io::{Read, Write},
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time,
 };
@@ -541,7 +543,7 @@ impl FuzzProject {
             }
         }
 
-        FuzzProject::merge_coverage(&coverage_out_raw_dir, &coverage_out_file)?;
+        Self::merge_coverage(&coverage_out_raw_dir, &coverage_out_file)?;
 
         Ok(())
     }
