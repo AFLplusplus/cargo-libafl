@@ -146,6 +146,7 @@ extern "C" {
 static mut BACKTRACE: Option<u64> = None;
 
 /// The main fn, `no_mangle` as it is a C symbol
+#[allow(clippy::too_many_lines)]
 #[no_mangle]
 pub fn main() {
     unsafe {

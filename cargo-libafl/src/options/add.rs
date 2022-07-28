@@ -13,7 +13,7 @@ pub struct Add {
 
 impl RunCommand for Add {
     fn run_command(&mut self) -> Result<()> {
-        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.to_owned())?;
+        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.clone())?;
         project.add_target(self)
     }
 }

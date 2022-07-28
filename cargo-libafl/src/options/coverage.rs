@@ -27,7 +27,7 @@ pub struct Coverage {
 
 impl RunCommand for Coverage {
     fn run_command(&mut self) -> Result<()> {
-        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.to_owned())?;
+        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.clone())?;
         self.build.coverage = true;
         project.exec_coverage(self)
     }

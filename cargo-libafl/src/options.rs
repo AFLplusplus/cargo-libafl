@@ -14,7 +14,7 @@ use std::str::FromStr;
 use std::{fmt as stdfmt, path::PathBuf};
 use structopt::StructOpt;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sanitizer {
     Address,
     Leak,
@@ -54,7 +54,8 @@ impl FromStr for Sanitizer {
     }
 }
 
-#[derive(Clone, Debug, StructOpt, PartialEq)]
+#[derive(Clone, Debug, StructOpt, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct BuildOptions {
     #[structopt(short = "D", long = "dev", conflicts_with = "release")]
     /// Build artifacts in development mode, without optimizations
@@ -197,7 +198,7 @@ impl stdfmt::Display for BuildOptions {
     }
 }
 
-#[derive(Clone, Debug, StructOpt, PartialEq)]
+#[derive(Clone, Debug, StructOpt, PartialEq, Eq)]
 pub struct FuzzDirWrapper {
     /// The path to the fuzz project directory.
     #[structopt(long = "fuzz-dir")]

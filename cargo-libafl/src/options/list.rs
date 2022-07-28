@@ -10,7 +10,8 @@ pub struct List {
 
 impl RunCommand for List {
     fn run_command(&mut self) -> Result<()> {
-        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.to_owned())?;
-        project.list_targets()
+        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.clone())?;
+        project.list_targets();
+        Ok(())
     }
 }

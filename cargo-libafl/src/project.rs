@@ -3,6 +3,8 @@ use crate::options::{self, BuildOptions, Sanitizer};
 use crate::utils::default_target;
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::HashSet;
+use std::ffi::OsStr;
+use std::fmt::Write as FmtWrite;
 use std::io::Read;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -89,11 +91,10 @@ impl FuzzProject {
         Ok(project)
     }
 
-    pub fn list_targets(&self) -> Result<()> {
+    pub fn list_targets(&self) {
         for bin in &self.targets {
             println!("{}", bin);
         }
-        Ok(())
     }
 
     /// Create a new fuzz target.
@@ -129,7 +130,7 @@ impl FuzzProject {
         Ok(cargo.write_fmt(toml_bin_template!(target))?)
     }
 
-    fn cargo(&self, subcommand: &str, build: &BuildOptions) -> Result<Command> {
+    fn cargo(&self, subcommand: &str, build: &BuildOptions) -> Command {
         let mut cmd = Command::new("cargo");
         cmd.arg(subcommand)
             .arg("--manifest-path")
@@ -168,7 +169,7 @@ impl FuzzProject {
 
         // link the fuzzer runtime
         rustflags.push_str(" -L ");
-        rustflags.push_str(&common::runtime_dir().to_string_lossy().to_string());
+        rustflags.push_str(&common::runtime_dir().to_string_lossy());
         rustflags.push_str(" -lcargo_libafl_runtime");
 
         if !build.no_trace_compares {
@@ -192,12 +193,9 @@ impl FuzzProject {
             Sanitizer::Memory => {
                 // Memory sanitizer requires more flags to function than others:
                 // https://doc.rust-lang.org/unstable-book/compiler-flags/sanitizer.html#memorysanitizer
-                rustflags.push_str(" -Zsanitizer=memory -Zsanitizer-memory-track-origins")
+                rustflags.push_str(" -Zsanitizer=memory -Zsanitizer-memory-track-origins");
             }
-            _ => rustflags.push_str(&format!(
-                " -Zsanitizer={sanitizer}",
-                sanitizer = build.sanitizer
-            )),
+            _ => write!(rustflags, " -Zsanitizer={}", build.sanitizer).unwrap(),
         }
         if build.triple.contains("-linux-") {
             rustflags.push_str(" -Cllvm-args=-sanitizer-coverage-stack-depth");
@@ -223,7 +221,7 @@ impl FuzzProject {
         }
 
         if let Ok(other_flags) = env::var("RUSTFLAGS") {
-            rustflags.push_str(" ");
+            rustflags.push(' ');
             rustflags.push_str(&other_flags);
         }
         cmd.env("RUSTFLAGS", rustflags);
@@ -253,18 +251,18 @@ impl FuzzProject {
             _ => {}
         }
 
-        Ok(cmd)
+        cmd
     }
 
     fn cargo_run(&self, build: &options::BuildOptions, fuzz_target: &str) -> Result<Command> {
-        let mut cmd = self.cargo("run", build)?;
+        let mut cmd = self.cargo("run", build);
         cmd.arg("--bin").arg(fuzz_target);
 
         if let Some(target_dir) = &build.target_dir {
             cmd.arg("--target-dir").arg(target_dir);
         }
 
-        let artifact_arg = ffi::OsString::from(self.artifacts_for(&fuzz_target)?);
+        let artifact_arg = ffi::OsString::from(self.artifacts_for(fuzz_target)?);
         cmd.arg("--").arg("--output").arg(artifact_arg);
 
         Ok(cmd)
@@ -275,7 +273,7 @@ impl FuzzProject {
         build: &options::BuildOptions,
         fuzz_target: Option<&str>,
     ) -> Result<()> {
-        let mut cmd = self.cargo("build", build)?;
+        let mut cmd = self.cargo("build", build);
 
         if let Some(fuzz_target) = fuzz_target {
             cmd.arg("--bin").arg(fuzz_target);
@@ -351,7 +349,7 @@ impl FuzzProject {
     ) -> Result<String> {
         let debug_output = tempfile::NamedTempFile::new().context("failed to create temp file")?;
 
-        let mut cmd = self.cargo_run(&build, &target)?;
+        let mut cmd = self.cargo_run(build, target)?;
         cmd.stdin(Stdio::null());
         cmd.env("RUST_LIBFUZZER_DEBUG_PATH", &debug_output.path());
         cmd.arg(&artifact);
@@ -543,7 +541,7 @@ impl FuzzProject {
             }
         }
 
-        self.merge_coverage(&coverage_out_raw_dir, &coverage_out_file)?;
+        FuzzProject::merge_coverage(&coverage_out_raw_dir, &coverage_out_file)?;
 
         Ok(())
     }
@@ -559,7 +557,7 @@ impl FuzzProject {
         // Raw coverage data will be saved in `coverage/<target>` directory.
         let input_file_name = input_file
             .file_name()
-            .and_then(|x| x.to_str())
+            .and_then(OsStr::to_str)
             .with_context(|| format!("Corpus contains file with invalid name {:?}", input_file))?;
         cmd.env(
             "LLVM_PROFILE_FILE",
@@ -574,7 +572,7 @@ impl FuzzProject {
         Ok((cmd, input_file_name.to_string()))
     }
 
-    fn merge_coverage(&self, profdata_raw_path: &Path, profdata_out_path: &Path) -> Result<()> {
+    fn merge_coverage(profdata_raw_path: &Path, profdata_out_path: &Path) -> Result<()> {
         let mut merge_cmd = Command::new(cargo_binutils::Tool::Profdata.path()?);
         merge_cmd.arg("merge").arg("-sparse");
         merge_cmd.arg(profdata_raw_path);
@@ -796,5 +794,5 @@ fn strip_current_dir_prefix(path: &Path) -> &Path {
     env::current_dir()
         .ok()
         .and_then(|curdir| path.strip_prefix(curdir).ok())
-        .unwrap_or(&path)
+        .unwrap_or(path)
 }

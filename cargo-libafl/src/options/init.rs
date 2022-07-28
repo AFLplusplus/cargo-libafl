@@ -19,7 +19,7 @@ pub struct Init {
 
 impl RunCommand for Init {
     fn run_command(&mut self) -> Result<()> {
-        FuzzProject::init(self, self.fuzz_dir_wrapper.fuzz_dir.to_owned())?;
+        FuzzProject::init(self, self.fuzz_dir_wrapper.fuzz_dir.clone())?;
         Ok(())
     }
 }
