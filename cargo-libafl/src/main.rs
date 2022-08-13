@@ -1,5 +1,5 @@
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::{self, Parser};
 
 #[macro_use]
 mod templates;
@@ -17,15 +17,15 @@ trait RunCommand {
     fn run_command(&mut self) -> Result<()>;
 }
 
-#[derive(Clone, Debug, StructOpt)]
-#[structopt(
-    setting(structopt::clap::AppSettings::SubcommandRequiredElseHelp),
-    setting(structopt::clap::AppSettings::GlobalVersion),
+#[derive(Clone, Debug, Parser)]
+#[clap(
+    setting(clap::AppSettings::SubcommandRequiredElseHelp),
+    setting(clap::AppSettings::GlobalVersion),
     version(option_env!("CARGO_PKG_VERSION").unwrap_or("0.0.0")),
     about(option_env!("CARGO_PKG_DESCRIPTION").unwrap_or("")),
     // Cargo passes in the subcommand name to the invoked executable. Use a
     // hidden, optional positional argument to deal with it.
-    arg(structopt::clap::Arg::with_name("dummy")
+    arg(clap::Arg::with_name("dummy")
         .possible_value("libafl")
         .required(false)
         .hidden(true)),

@@ -4,14 +4,14 @@ use crate::{
     RunCommand,
 };
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::{self, Parser};
 
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, Parser)]
 pub struct Build {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub build: BuildOptions,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub fuzz_dir_wrapper: FuzzDirWrapper,
 
     /// Name of the fuzz target to build, or build all targets if not supplied
@@ -20,7 +20,7 @@ pub struct Build {
 
 impl RunCommand for Build {
     fn run_command(&mut self) -> Result<()> {
-        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.to_owned())?;
-        project.exec_build(&self.build, self.target.as_deref().map(|s| s))
+        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.clone())?;
+        project.exec_build(&self.build, self.target.as_deref())
     }
 }

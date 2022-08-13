@@ -10,11 +10,11 @@ pub use self::{
     add::Add, build::Build, coverage::Coverage, fmt::Fmt, init::Init, list::List, run::Run,
 };
 
+use clap::{self, Parser};
 use std::str::FromStr;
 use std::{fmt as stdfmt, path::PathBuf};
-use structopt::StructOpt;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sanitizer {
     Address,
     Leak,
@@ -54,29 +54,30 @@ impl FromStr for Sanitizer {
     }
 }
 
-#[derive(Clone, Debug, StructOpt, PartialEq)]
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct BuildOptions {
-    #[structopt(short = "D", long = "dev", conflicts_with = "release")]
+    #[clap(short = 'D', long = "dev", conflicts_with = "release")]
     /// Build artifacts in development mode, without optimizations
     pub dev: bool,
 
-    #[structopt(short = "O", long = "release", conflicts_with = "dev")]
+    #[clap(short = 'O', long = "release", conflicts_with = "dev")]
     /// Build artifacts in release mode, with optimizations
     pub release: bool,
 
-    #[structopt(short = "a", long = "debug-assertions")]
+    #[clap(short = 'a', long = "debug-assertions")]
     /// Build artifacts with debug assertions and overflow checks enabled (default if not -O)
     pub debug_assertions: bool,
 
     /// Build target with verbose output from `cargo build`
-    #[structopt(short = "v", long = "verbose")]
+    #[clap(short = 'v', long = "verbose")]
     pub verbose: bool,
 
-    #[structopt(long = "no-default-features")]
+    #[clap(long = "no-default-features")]
     /// Build artifacts with default Cargo features disabled
     pub no_default_features: bool,
 
-    #[structopt(
+    #[clap(
         long = "all-features",
         conflicts_with = "no-default-features",
         conflicts_with = "features"
@@ -84,12 +85,12 @@ pub struct BuildOptions {
     /// Build artifacts with all Cargo features enabled
     pub all_features: bool,
 
-    #[structopt(long = "features")]
+    #[clap(long = "features")]
     /// Build artifacts with given Cargo feature enabled
     pub features: Option<String>,
 
-    #[structopt(
-        short = "s",
+    #[clap(
+        short = 's',
         long = "sanitizer",
         possible_values(&["address", "leak", "memory", "thread", "none"]),
         default_value = "address",
@@ -97,7 +98,7 @@ pub struct BuildOptions {
     /// Use a specific sanitizer
     pub sanitizer: Sanitizer,
 
-    #[structopt(
+    #[clap(
         name = "triple",
         long = "target",
         default_value(crate::utils::default_target())
@@ -105,15 +106,15 @@ pub struct BuildOptions {
     /// Target triple of the fuzz target
     pub triple: String,
 
-    #[structopt(short = "Z", value_name = "FLAG")]
+    #[clap(short = 'Z', value_name = "FLAG")]
     /// Unstable (nightly-only) flags to Cargo
     pub unstable_flags: Vec<String>,
 
-    #[structopt(long = "target-dir")]
+    #[clap(long = "target-dir")]
     /// Target dir option to pass to cargo build.
     pub target_dir: Option<String>,
 
-    #[structopt(skip = false)]
+    #[clap(skip = false)]
     /// Instrument program code with source-based code coverage information.
     /// This build option will be automatically used when running `cargo fuzz coverage`.
     /// The option will not be shown to the user, which is ensured by the `skip` attribute.
@@ -123,15 +124,15 @@ pub struct BuildOptions {
 
     /// Dead code is linked by default to prevent a potential error with some
     /// optimized targets. This flag allows you to opt out of it.
-    #[structopt(long)]
+    #[clap(long)]
     pub strip_dead_code: bool,
 
     /// By default the 'cfg(fuzzing)' compilation configuration is set. This flag
     /// allows you to opt out of it.
-    #[structopt(long)]
+    #[clap(long)]
     pub no_cfg_fuzzing: bool,
 
-    #[structopt(long)]
+    #[clap(long)]
     /// Don't build with the `sanitizer-coverage-trace-compares` LLVM argument
     ///
     ///  Using this may improve fuzzer throughput at the cost of worse coverage accuracy.
@@ -197,10 +198,10 @@ impl stdfmt::Display for BuildOptions {
     }
 }
 
-#[derive(Clone, Debug, StructOpt, PartialEq)]
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
 pub struct FuzzDirWrapper {
     /// The path to the fuzz project directory.
-    #[structopt(long = "fuzz-dir")]
+    #[clap(long = "fuzz-dir")]
     pub fuzz_dir: Option<PathBuf>,
 }
 

@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
-use xdg;
+use xdg::BaseDirectories;
 
-fn xdg_dir() -> xdg::BaseDirectories {
+fn xdg_dir() -> BaseDirectories {
     let prefix = Path::new("cargo-libafl")
         .join(rustc_version())
         .join(pkg_version());
-    xdg::BaseDirectories::with_prefix(prefix).unwrap()
+    BaseDirectories::with_prefix(prefix).unwrap()
 }
 
 const SHORT_COMMIT_HASH_LEN: usize = 7;

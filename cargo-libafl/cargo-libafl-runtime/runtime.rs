@@ -4,15 +4,15 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+use clap::{self, Parser};
 use core::time::Duration;
 use std::{env, fs, net::SocketAddr, path::PathBuf};
-use structopt::StructOpt;
 
 use libafl::{
     bolts::{
+        core_affinity::Cores,
         current_nanos,
         launcher::Launcher,
-        os::Cores,
         rands::StdRand,
         shmem::{ShMemProvider, StdShMemProvider},
         tuples::{tuple_list, Merge},
@@ -22,11 +22,9 @@ use libafl::{
     events::EventConfig,
     executors::{inprocess::InProcessExecutor, ExitKind, TimeoutExecutor},
     feedback_and_fast, feedback_or,
-    feedbacks::{
-        CrashFeedback, MapFeedbackState, MaxMapFeedback, NewHashFeedback, NewHashFeedbackState,
-        TimeFeedback,
-    },
-    fuzzer::{Fuzzer, StdFuzzer},
+    feedbacks::{CrashFeedback, MaxMapFeedback, NewHashFeedback, TimeFeedback},
+    fuzzer::Fuzzer,
+    fuzzer::StdFuzzer,
     generators::RandBytesGenerator,
     inputs::{BytesInput, HasTargetBytes},
     monitors::tui::TuiMonitor,
@@ -35,12 +33,11 @@ use libafl::{
         token_mutations::{I2SRandReplace, Tokens},
         StdMOptMutator,
     },
-    observers::{BacktraceObserver, HitcountsMapObserver, MultiMapObserver, TimeObserver},
+    observers::{BacktraceObserver, HitcountsIterableMapObserver, MultiMapObserver, TimeObserver},
+    prelude::powersched::PowerSchedule,
     schedulers::{IndexesLenTimeMinimizerScheduler, PowerQueueScheduler},
     stages::{
-        calibrate::CalibrationStage,
-        power::{PowerMutationalStage, PowerSchedule},
-        StdMutationalStage, TracingStage,
+        calibrate::CalibrationStage, StdMutationalStage, StdPowerMutationalStage, TracingStage,
     },
     state::{HasCorpus, HasMetadata, StdState},
     Error,
@@ -58,14 +55,14 @@ fn timeout_from_millis_str(time: &str) -> Result<Duration, Error> {
     Ok(Duration::from_millis(time.parse()?))
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Parser, Debug)]
+#[clap(
     name = "cargo-libafl",
     about = "A `cargo` wrapper to fuzz Rust code with `LibAFL`",
     author = "Andrea Fioraldi <andreafioraldi@gmail.com>"
 )]
 struct Opt {
-    #[structopt(
+    #[clap(
         short,
         long,
         parse(try_from_str = Cores::from_cmdline),
@@ -74,24 +71,24 @@ struct Opt {
     )]
     cores: Cores,
 
-    #[structopt(
-        short = "p",
+    #[clap(
+        short = 'p',
         long,
         help = "Choose the broker TCP port, otherwise pick one at random",
         name = "PORT"
     )]
     broker_port: Option<u16>,
 
-    #[structopt(
+    #[clap(
         parse(try_from_str),
-        short = "a",
+        short = 'a',
         long,
         help = "Specify a remote broker",
         name = "REMOTE"
     )]
     remote_broker_addr: Option<SocketAddr>,
 
-    #[structopt(
+    #[clap(
         parse(try_from_str),
         short,
         long,
@@ -100,7 +97,7 @@ struct Opt {
     )]
     input: Vec<PathBuf>,
 
-    #[structopt(
+    #[clap(
         short,
         long,
         parse(try_from_str),
@@ -110,19 +107,19 @@ struct Opt {
     )]
     output: PathBuf,
 
-    #[structopt(
+    #[clap(
         parse(try_from_str = timeout_from_millis_str),
         short,
         long,
-        help = "Set the exeucution timeout in milliseconds, default is 1000",
+        help = "Set the execuution timeout in milliseconds, default is 1000",
         name = "TIMEOUT",
         default_value = "1000"
     )]
     timeout: Duration,
 
-    #[structopt(
+    #[clap(
         parse(from_os_str),
-        short = "x",
+        short = 'x',
         long,
         help = "Feed the fuzzer with an user-specified list of tokens (often called \"dictionary\")",
         name = "TOKENS",
@@ -130,7 +127,7 @@ struct Opt {
     )]
     tokens: Vec<PathBuf>,
 
-    #[structopt(
+    #[clap(
         long,
         help = "Disable unicode in the UI (for old terminals)",
         name = "DISABLE_UNICODE"
@@ -149,6 +146,7 @@ extern "C" {
 static mut BACKTRACE: Option<u64> = None;
 
 /// The main fn, `no_mangle` as it is a C symbol
+#[allow(clippy::too_many_lines)]
 #[no_mangle]
 pub fn main() {
     unsafe {
@@ -157,7 +155,7 @@ pub fn main() {
 
     let workdir = env::current_dir().unwrap();
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     let cores = opt.cores;
     let broker_port = opt.broker_port.unwrap_or_else(|| {
@@ -188,10 +186,11 @@ pub fn main() {
 
     let monitor = TuiMonitor::new(format!("cargo-libafl v{}", VERSION), !opt.disable_unicode);
 
-    let mut run_client = |state: Option<StdState<_, _, _, _, _>>, mut mgr, _core_id| {
+    let mut run_client = |state: Option<StdState<_, _, _, _>>, mut mgr, _core_id| {
         // Create an observation channel using the coverage map
         let edges = unsafe { &mut COUNTERS_MAPS };
-        let edges_observer = HitcountsMapObserver::new(MultiMapObserver::new("edges", edges));
+        let edges_observer =
+            HitcountsIterableMapObserver::new(MultiMapObserver::new("edges", edges));
 
         // Create an observation channel to keep track of the execution time
         let time_observer = TimeObserver::new("time");
@@ -207,23 +206,23 @@ pub fn main() {
             libafl::observers::HarnessType::InProcess,
         );
 
-        // The states of the feedbacks.
-        let edges_state = MapFeedbackState::with_observer(&edges_observer);
-        let hash_state = NewHashFeedbackState::<u64>::with_observer(&backtrace_observer);
+        // New maximization map feedback linked to the edges observer
+        let map_feedback = MaxMapFeedback::new_tracking(&edges_observer, true, false);
+
+        let calibration = CalibrationStage::new(&map_feedback);
 
         // Feedback to rate the interestingness of an input
         // This one is composed by two Feedbacks in OR
-        let feedback = feedback_or!(
-            // New maximization map feedback linked to the edges observer and the feedback state
-            MaxMapFeedback::new_tracking(&edges_state, &edges_observer, true, false),
+        let mut feedback = feedback_or!(
+            map_feedback,
             // Time feedback, this one does not need a feedback state
             TimeFeedback::new_with_observer(&time_observer)
         );
 
         // A feedback to choose if an input is a solution or not
-        let objective = feedback_and_fast!(
+        let mut objective = feedback_and_fast!(
             CrashFeedback::new(),
-            NewHashFeedback::new_with_observer("NewHashFeedback", &backtrace_observer)
+            NewHashFeedback::new(&backtrace_observer)
         );
 
         // If not restarting, create a State from scratch
@@ -236,10 +235,12 @@ pub fn main() {
                 // Corpus in which we store solutions (crashes in this example),
                 // on disk so the user can get them after stopping the fuzzer
                 OnDiskCorpus::new(crashes_dir.clone()).unwrap(),
-                // States of the feedbacks.
-                // They are the data related to the feedbacks that you want to persist in the State.
-                tuple_list!(edges_state, hash_state),
+                // A reference to the feedbacks, to create their feedback state
+                &mut feedback,
+                // A reference to the objectives, to create their objective state
+                &mut objective,
             )
+            .expect("Failed to create state")
         });
 
         // Read tokens
@@ -258,20 +259,23 @@ pub fn main() {
             }
         }
 
-        let calibration = CalibrationStage::new(&mut state, &edges_observer);
-
         // Setup a randomic Input2State stage
         let i2s =
             StdMutationalStage::new(StdScheduledMutator::new(tuple_list!(I2SRandReplace::new())));
 
         // Setup a MOPT mutator
-        let mutator =
-            StdMOptMutator::new(&mut state, havoc_mutations().merge(tokens_mutations()), 5)?;
+        let mutator = StdMOptMutator::new(
+            &mut state,
+            havoc_mutations().merge(tokens_mutations()),
+            7,
+            5,
+        )?;
 
-        let power = PowerMutationalStage::new(mutator, PowerSchedule::FAST, &edges_observer);
+        let power = StdPowerMutationalStage::new(mutator, &edges_observer);
 
         // A minimization+queue policy to get testcasess from the corpus
-        let scheduler = IndexesLenTimeMinimizerScheduler::new(PowerQueueScheduler::new());
+        let scheduler =
+            IndexesLenTimeMinimizerScheduler::new(PowerQueueScheduler::new(PowerSchedule::FAST));
 
         // A fuzzer with feedbacks and a corpus scheduler
         let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);

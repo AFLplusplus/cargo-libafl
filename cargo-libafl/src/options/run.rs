@@ -4,11 +4,11 @@ use crate::{
     RunCommand,
 };
 use anyhow::Result;
-use structopt::StructOpt;
+use clap::{self, Parser};
 
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, Parser)]
 pub struct Run {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub build: BuildOptions,
 
     /// Name of the fuzz target
@@ -17,17 +17,17 @@ pub struct Run {
     /// Custom corpus directories or artifact files.
     pub corpus: Vec<String>,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     pub fuzz_dir_wrapper: FuzzDirWrapper,
 
-    #[structopt(last(true))]
+    #[clap(last(true))]
     /// Additional libFuzzer arguments passed through to the binary
     pub args: Vec<String>,
 }
 
 impl RunCommand for Run {
     fn run_command(&mut self) -> Result<()> {
-        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.to_owned())?;
+        let project = FuzzProject::new(self.fuzz_dir_wrapper.fuzz_dir.clone())?;
         project.exec_fuzz(self)
     }
 }

@@ -12,7 +12,7 @@ fn main() {
     println!("cargo:rustc-env=TARGET={}", env::var("TARGET").unwrap());
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=cargo-libafl-runtime/runtime.rs");
-    println!("cargo:rerun-if-changed=cargo-libafl-runtime/template.Cargo.toml");
+    println!("cargo:rerun-if-changed=cargo-libafl-runtime/Cargo.toml");
 
     if env::var("PUBLISH_ON_CRATES").is_ok() || env::var("DOCS_RS").is_ok() {
         return;
@@ -26,15 +26,15 @@ fn main() {
     let out_dir = out_dir.to_string_lossy().to_string();
     let out_path = Path::new(&out_dir);
 
-    let mut file = fs::File::open(&rt_path.join("template.Cargo.toml"))
-        .expect("Couldn't open template.Cargo.toml");
+    let mut file =
+        fs::File::open(&rt_path.join("Cargo.toml")).expect("Couldn't open template.Cargo.toml");
     let mut template = String::new();
     file.read_to_string(&mut template)
         .expect("Couldn't read template.Cargo.toml");
     drop(file);
 
     template = template.replace(
-        "version = X",
+        "version = \"13.3.7\"",
         &format!("version = \"{}\"", env!("CARGO_PKG_VERSION")),
     );
 
@@ -44,12 +44,8 @@ fn main() {
         .expect("Couldn't write Cargo.toml");
     drop(file);
 
-    fs::create_dir_all(out_path.join("src")).expect("Failed to create the src dir");
-    fs::copy(
-        rt_path.join("runtime.rs"),
-        out_path.join("src").join("lib.rs"),
-    )
-    .expect("Couldn't copy runtime.rs");
+    fs::copy(rt_path.join("runtime.rs"), out_path.join("runtime.rs"))
+        .expect("Couldn't copy runtime.rs");
 
     assert!(Command::new("cargo")
         .current_dir(&out_path)
