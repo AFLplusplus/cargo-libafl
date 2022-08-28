@@ -23,21 +23,27 @@ use libafl::{
     executors::{inprocess::InProcessExecutor, ExitKind, TimeoutExecutor},
     feedback_and_fast, feedback_or,
     feedbacks::{CrashFeedback, MaxMapFeedback, NewHashFeedback, TimeFeedback},
-    fuzzer::Fuzzer,
-    fuzzer::StdFuzzer,
+    fuzzer::{Fuzzer, StdFuzzer},
     generators::RandBytesGenerator,
-    inputs::{BytesInput, HasTargetBytes},
+    inputs::HasTargetBytes,
     monitors::tui::TuiMonitor,
     mutators::{
+        grimoire::{
+            GrimoireExtensionMutator, GrimoireRandomDeleteMutator,
+            GrimoireRecursiveReplacementMutator, GrimoireStringReplacementMutator,
+        },
         scheduled::{havoc_mutations, tokens_mutations, StdScheduledMutator},
         token_mutations::{I2SRandReplace, Tokens},
         StdMOptMutator,
     },
     observers::{BacktraceObserver, HitcountsIterableMapObserver, MultiMapObserver, TimeObserver},
-    prelude::powersched::PowerSchedule,
-    schedulers::{IndexesLenTimeMinimizerScheduler, PowerQueueScheduler},
+    prelude::{GeneralizedInput, GeneralizedInputBytesGenerator},
+    schedulers::{
+        powersched::PowerSchedule, IndexesLenTimeMinimizerScheduler, PowerQueueScheduler,
+    },
     stages::{
-        calibrate::CalibrationStage, StdMutationalStage, StdPowerMutationalStage, TracingStage,
+        calibrate::CalibrationStage, GeneralizationStage, SkippableStage, StdMutationalStage,
+        StdPowerMutationalStage, TracingStage,
     },
     state::{HasCorpus, HasMetadata, StdState},
     Error,
@@ -45,8 +51,8 @@ use libafl::{
 
 use libafl_targets::{CmpLogObserver, CMPLOG_MAP, COUNTERS_MAPS};
 
-//#[cfg(target_os = "linux")]
-//use libafl_targets::autotokens;
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+use libafl_targets::autotokens;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -59,7 +65,7 @@ fn timeout_from_millis_str(time: &str) -> Result<Duration, Error> {
 #[clap(
     name = "cargo-libafl",
     about = "A `cargo` wrapper to fuzz Rust code with `LibAFL`",
-    author = "Andrea Fioraldi <andreafioraldi@gmail.com>"
+    author = "Andrea Fioraldi <andreafioraldi@gmail.com> and the LibAFL team"
 )]
 struct Opt {
     #[clap(
@@ -67,6 +73,7 @@ struct Opt {
         long,
         parse(try_from_str = Cores::from_cmdline),
         help = "Spawn a client in each of the provided cores. Broker runs in the 0th core. 'all' to select all available cores. 'none' to run a client without binding to any core. eg: '1,2-4,6' selects the cores 1,2,3,4,6.",
+        default_value = "all",
         name = "CORES"
     )]
     cores: Cores,
@@ -133,6 +140,14 @@ struct Opt {
         name = "DISABLE_UNICODE"
     )]
     disable_unicode: bool,
+
+    #[clap(
+        short = 'g',
+        long,
+        help = "Use GRIMOIRE, a mutator for text-based inputs",
+        name = "GRIMOIRE"
+    )]
+    grimoire: bool,
 }
 
 extern "C" {
@@ -249,10 +264,10 @@ pub fn main() {
             for tokenfile in &token_files {
                 toks.add_from_file(tokenfile)?;
             }
-            //#[cfg(target_os = "linux")]
-            //{
-            //    toks += autotokens()?;
-            //}
+            #[cfg(any(target_os = "linux", target_vendor = "apple"))]
+            {
+                toks += autotokens()?;
+            }
 
             if !toks.is_empty() {
                 state.add_metadata(toks);
@@ -271,6 +286,20 @@ pub fn main() {
             5,
         )?;
 
+        let grimoire_mutator = StdScheduledMutator::with_max_stack_pow(
+            tuple_list!(
+                GrimoireExtensionMutator::new(),
+                GrimoireRecursiveReplacementMutator::new(),
+                GrimoireStringReplacementMutator::new(),
+                // give more probability to avoid large inputs
+                GrimoireRandomDeleteMutator::new(),
+                GrimoireRandomDeleteMutator::new(),
+            ),
+            3,
+        );
+        let grimoire = StdMutationalStage::new(grimoire_mutator);
+        let skippable_grimoire = SkippableStage::new(grimoire, |_s| opt.grimoire.into());
+
         let power = StdPowerMutationalStage::new(mutator, &edges_observer);
 
         // A minimization+queue policy to get testcasess from the corpus
@@ -281,7 +310,7 @@ pub fn main() {
         let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
 
         // The wrapped harness function, calling out to the LLVM-style harness
-        let mut harness = |input: &BytesInput| {
+        let mut harness = |input: &GeneralizedInput| {
             let target = input.target_bytes();
             let buf = target.as_slice();
             unsafe {
@@ -289,6 +318,13 @@ pub fn main() {
             }
             ExitKind::Ok
         };
+
+        let mut tracing_harness = harness;
+
+        let generalization = GeneralizationStage::new(&edges_observer);
+
+        let skippable_generalization =
+            SkippableStage::new(generalization, |_s| opt.grimoire.into());
 
         // Create the executor for an in-process function with one observer for edge coverage and one for the execution time
         let mut executor = TimeoutExecutor::new(
@@ -302,19 +338,9 @@ pub fn main() {
             timeout_ms,
         );
 
-        // Secondary harness due to mut ownership
-        let mut harness = |input: &BytesInput| {
-            let target = input.target_bytes();
-            let buf = target.as_slice();
-            unsafe {
-                rust_fuzzer_test_input(buf);
-            }
-            ExitKind::Ok
-        };
-
         // Setup a tracing stage in which we log comparisons
         let tracing = TracingStage::new(InProcessExecutor::new(
-            &mut harness,
+            &mut tracing_harness,
             tuple_list!(cmplog_observer),
             &mut fuzzer,
             &mut state,
@@ -322,13 +348,21 @@ pub fn main() {
         )?);
 
         // The order of the stages matter!
-        let mut stages = tuple_list!(calibration, tracing, i2s, power);
+        let mut stages = tuple_list!(
+            skippable_generalization,
+            calibration,
+            tracing,
+            i2s,
+            power,
+            skippable_grimoire
+        );
 
         // In case the corpus is empty (on first run), reset
         if state.corpus().count() < 1 {
             if input_dirs.is_empty() {
                 // Generator of printable bytearrays of max size 32
-                let mut generator = RandBytesGenerator::new(32);
+                let mut generator =
+                    GeneralizedInputBytesGenerator::from(RandBytesGenerator::new(32));
 
                 // Generate 8 initial inputs
                 state
