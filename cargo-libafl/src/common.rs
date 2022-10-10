@@ -44,7 +44,11 @@ pub fn runtime_dir() -> PathBuf {
 
 #[cfg(not(docsrs))]
 pub fn runtime_dir() -> PathBuf {
-    xdg_dir().create_data_directory("cargo-libafl").unwrap()
+    if let Some(custom_dir) = std::env::var_os("CUSTOM_LIBAFL_RUNTIME") {
+        PathBuf::from(custom_dir)
+    } else {
+        xdg_dir().create_data_directory("cargo-libafl").unwrap()
+    }
 }
 
 #[allow(dead_code)]

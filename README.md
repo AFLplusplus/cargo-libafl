@@ -18,6 +18,10 @@ cargo install -f cargo-libafl
 cargo libafl --help
 ```
 
+### Custom Runtimes
+
+If you need to use a custom runtime for your target, e.g. when using custom mutators, define an environmental variable `CUSTOM_LIBAFL_RUNTIME` to the target/release folder of your runtime. Note that your runtime should match the name (`cargo-libafl-runtime`) and the flags of the original runtime. To do this effectively, you should copy the `cargo-libafl-runtime` folder and modify it to your needs.
+
 #### License
 
 <sup>
