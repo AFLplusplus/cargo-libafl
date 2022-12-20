@@ -13,11 +13,11 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "4375206" }
-libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "4375206", features = ["sancov_8bit", "sancov_cmplog"] }
+libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "7ed1ac9" }
+libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "7ed1ac9", features = ["sancov_8bit", "sancov_cmplog"] }
 mimalloc = { version = "*", default-features = false }
 portpicker = "0.1.1"
-clap = { version = "3.2", features = ["derive"] }
+clap = { version = "4.0", features = ["derive"] }
 
 [profile.release]
 lto = true
