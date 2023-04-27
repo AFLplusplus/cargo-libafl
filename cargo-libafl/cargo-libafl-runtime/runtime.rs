@@ -18,15 +18,14 @@ use libafl::{
         tuples::{tuple_list, Merge},
         AsSlice,
     },
-    corpus::{CachedOnDiskCorpus, Corpus, OnDiskCorpus},
+    corpus::{self, CachedOnDiskCorpus, Corpus, OnDiskCorpus},
     events::EventConfig,
     executors::{inprocess::InProcessExecutor, ExitKind, TimeoutExecutor},
     feedback_and_fast, feedback_or,
     feedbacks::{CrashFeedback, MaxMapFeedback, NewHashFeedback, TimeFeedback},
     fuzzer::{Fuzzer, StdFuzzer},
     generators::RandBytesGenerator,
-    inputs::HasTargetBytes,
-    monitors::tui::TuiMonitor,
+    inputs::{BytesInput, HasTargetBytes},
     mutators::{
         grimoire::{
             GrimoireExtensionMutator, GrimoireRandomDeleteMutator,
@@ -36,20 +35,29 @@ use libafl::{
         token_mutations::{I2SRandReplace, Tokens},
         StdMOptMutator,
     },
-    observers::{BacktraceObserver, HitcountsIterableMapObserver, MultiMapObserver, TimeObserver},
-    prelude::{GeneralizedInput, GeneralizedInputBytesGenerator},
+    observers::{BacktraceObserver, TimeObserver},
     schedulers::{
         powersched::PowerSchedule, IndexesLenTimeMinimizerScheduler, PowerQueueScheduler,
     },
     stages::{
-        calibrate::CalibrationStage, GeneralizationStage, SkippableStage, StdMutationalStage,
+        calibrate::CalibrationStage, logics::IfElseStage, GeneralizationStage, StdMutationalStage,
         StdPowerMutationalStage, TracingStage,
     },
     state::{HasCorpus, HasMetadata, StdState},
     Error,
 };
 
-use libafl_targets::{CmpLogObserver, CMPLOG_MAP, COUNTERS_MAPS};
+use libafl_targets::CmpLogObserver;
+
+#[cfg(feature = "sancov_8bit")]
+use libafl::observers::{HitcountsIterableMapObserver, MultiMapObserver};
+#[cfg(feature = "sancov_8bit")]
+use libafl_targets::COUNTERS_MAPS;
+
+#[cfg(not(feature = "sancov_8bit"))]
+use libafl::observers::HitcountsMapObserver;
+#[cfg(not(feature = "sancov_8bit"))]
+use libafl_targets::coverage::std_edges_map_observer;
 
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
 use libafl_targets::autotokens;
@@ -89,17 +97,17 @@ struct Opt {
     #[arg(short = 'a', long, help = "Specify a remote broker", name = "REMOTE")]
     remote_broker_addr: Option<SocketAddr>,
 
-    #[arg(short, long, help = "Set an initial corpus directory", name = "INPUT")]
+    #[arg(short, long, help = "Set seed inputs directory", name = "INPUT")]
     input: Vec<PathBuf>,
 
-    #[arg(
-        short,
-        long,
-        help = "Set the output directory, default is ./out",
-        name = "OUTPUT",
-        default_value = "./out"
-    )]
-    output: PathBuf,
+    #[arg(short, long, help = "Set the corpus directory", name = "CORPUS")]
+    corpus: PathBuf,
+
+    #[arg(short, long, help = "Set the crashes directory", name = "CRASHES")]
+    crashes: PathBuf,
+
+    #[arg(short, long, help = "show stdout or redirect to /dev/null")]
+    show_stdout: bool,
 
     #[arg(
         value_parser = timeout_from_millis_str,
@@ -130,7 +138,8 @@ struct Opt {
         short = 'g',
         long,
         help = "Use GRIMOIRE, a mutator for text-based inputs",
-        name = "GRIMOIRE"
+        name = "GRIMOIRE",
+        default_value_t = false
     )]
     grimoire: bool,
 }
@@ -153,6 +162,8 @@ pub fn main() {
         rust_fuzzer_initialize();
     }
 
+    env_logger::init();
+
     let workdir = env::current_dir().unwrap();
 
     let opt = Opt::parse();
@@ -160,44 +171,66 @@ pub fn main() {
     let cores = opt.cores;
     let broker_port = opt.broker_port.unwrap_or_else(|| {
         let port = portpicker::pick_unused_port().expect("No ports free");
-        println!("Picking the free port {}", port);
+        log::info!("Picking the free port {}", port);
         port
     });
     let remote_broker_addr = opt.remote_broker_addr;
-    let input_dirs = opt.input;
-    let output_dir = opt.output;
+    let mut input_dirs = opt.input.clone();
+    let corpus_dir = opt.corpus;
+    let crashes_dir = opt.crashes;
     let token_files = opt.tokens;
     let timeout_ms = opt.timeout;
-    // let cmplog_enabled = matches.is_present("cmplog");
 
-    if fs::create_dir(&output_dir).is_err() {
-        println!("Out dir at {:?} already exists.", &output_dir);
-        if !output_dir.is_dir() {
-            eprintln!("Out dir at {:?} is not a valid directory!", &output_dir);
-            return;
+    for dir in &[&corpus_dir, &crashes_dir] {
+        if fs::create_dir(dir).is_err() {
+            log::warn!("Out dir at {:?} already exists.", dir);
+            if !dir.is_dir() {
+                log::error!("Required directory at {:?} is not a valid directory!", dir);
+                return;
+            }
         }
     }
-    let crashes_dir = output_dir.join("crashes");
-    let corpus_dir = output_dir.join("corpus");
-
-    println!("Workdir: {:?}", workdir.to_string_lossy().to_string());
+    log::info!(
+        "Workdir: {:?}, Corpus: {:?}, Crashes: {:?}",
+        workdir.to_string_lossy().to_string(),
+        corpus_dir,
+        crashes_dir
+    );
 
     let shmem_provider = StdShMemProvider::new().expect("Failed to init shared memory");
 
-    let monitor = TuiMonitor::new(format!("cargo-libafl v{}", VERSION), !opt.disable_unicode);
+    #[cfg(feature = "tui")]
+    let monitor = {
+        use libafl::monitors::tui::{ui::TuiUI, TuiMonitor};
+        let ui = TuiUI::with_version(
+            String::from("cargo-libafl"),
+            VERSION.to_string(),
+            !opt.disable_unicode,
+        );
+        TuiMonitor::new(ui)
+    };
+    #[cfg(not(feature = "tui"))]
+    let monitor = libafl::monitors::MultiMonitor::new(|s| log::info!("{}", s));
 
     let mut run_client = |state: Option<StdState<_, _, _, _>>, mut mgr, _core_id| {
-        // Create an observation channel using the coverage map
-        let edges = unsafe { &mut COUNTERS_MAPS };
-        let edges_observer =
-            HitcountsIterableMapObserver::new(MultiMapObserver::new("edges", edges));
+        log::debug!("running fuzzing client");
+        // first create an observation channel using the coverage map
+
+        #[cfg(feature = "sancov_8bit")]
+        let edges_observer = {
+            let edges = unsafe { &mut COUNTERS_MAPS };
+            // TODO: is the call to edges.clone here the reason for breaking sancov_8bit?
+            HitcountsIterableMapObserver::new(MultiMapObserver::new("edges", edges.clone()))
+        };
+
+        #[cfg(not(feature = "sancov_8bit"))]
+        let edges_observer = HitcountsMapObserver::new(unsafe { std_edges_map_observer("edges") });
 
         // Create an observation channel to keep track of the execution time
         let time_observer = TimeObserver::new("time");
 
         // Create the Cmp observer
-        let cmplog = unsafe { &mut CMPLOG_MAP };
-        let cmplog_observer = CmpLogObserver::new("cmplog", cmplog, true);
+        let cmplog_observer = CmpLogObserver::new("cmplog", true);
 
         // Create a stacktrace observer
         let backtrace_observer = BacktraceObserver::new(
@@ -207,7 +240,7 @@ pub fn main() {
         );
 
         // New maximization map feedback linked to the edges observer
-        let map_feedback = MaxMapFeedback::new_tracking(&edges_observer, true, false);
+        let map_feedback = MaxMapFeedback::tracking(&edges_observer, true, true);
 
         let calibration = CalibrationStage::new(&map_feedback);
 
@@ -216,7 +249,7 @@ pub fn main() {
         let mut feedback = feedback_or!(
             map_feedback,
             // Time feedback, this one does not need a feedback state
-            TimeFeedback::new_with_observer(&time_observer)
+            TimeFeedback::with_observer(&time_observer)
         );
 
         // A feedback to choose if an input is a solution or not
@@ -244,7 +277,7 @@ pub fn main() {
         });
 
         // Read tokens
-        if state.metadata().get::<Tokens>().is_none() {
+        if !state.has_metadata::<Tokens>() {
             let mut toks = Tokens::default();
             for tokenfile in &token_files {
                 toks.add_from_file(tokenfile)?;
@@ -271,6 +304,7 @@ pub fn main() {
             5,
         )?;
 
+        let grimoire_enabled: bool = opt.grimoire.into();
         let grimoire_mutator = StdScheduledMutator::with_max_stack_pow(
             tuple_list!(
                 GrimoireExtensionMutator::new(),
@@ -282,20 +316,28 @@ pub fn main() {
             ),
             3,
         );
-        let grimoire = StdMutationalStage::new(grimoire_mutator);
-        let skippable_grimoire = SkippableStage::new(grimoire, |_s| opt.grimoire.into());
+        let grimoire = StdMutationalStage::transforming(grimoire_mutator);
+        let skippable_grimoire = IfElseStage::new(
+            |_, _, _, _, _| Ok(grimoire_enabled),
+            tuple_list!(grimoire),
+            tuple_list!(),
+        );
+        // SkippableStage::new(grimoire, |_s| opt.grimoire.into());
 
-        let power = StdPowerMutationalStage::new(mutator, &edges_observer);
+        let power = StdPowerMutationalStage::new(mutator);
 
         // A minimization+queue policy to get testcasess from the corpus
-        let scheduler =
-            IndexesLenTimeMinimizerScheduler::new(PowerQueueScheduler::new(PowerSchedule::FAST));
+        let scheduler = IndexesLenTimeMinimizerScheduler::new(PowerQueueScheduler::new(
+            &mut state,
+            &edges_observer,
+            PowerSchedule::FAST,
+        ));
 
         // A fuzzer with feedbacks and a corpus scheduler
         let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
 
         // The wrapped harness function, calling out to the LLVM-style harness
-        let mut harness = |input: &GeneralizedInput| {
+        let mut harness = |input: &BytesInput| {
             let target = input.target_bytes();
             let buf = target.as_slice();
             unsafe {
@@ -307,9 +349,11 @@ pub fn main() {
         let mut tracing_harness = harness;
 
         let generalization = GeneralizationStage::new(&edges_observer);
-
-        let skippable_generalization =
-            SkippableStage::new(generalization, |_s| opt.grimoire.into());
+        let skippable_generalization = IfElseStage::new(
+            |_, _, _, _, _| Ok(grimoire_enabled),
+            tuple_list!(generalization),
+            tuple_list!(),
+        );
 
         // Create the executor for an in-process function with one observer for edge coverage and one for the execution time
         let mut executor = TimeoutExecutor::new(
@@ -342,37 +386,36 @@ pub fn main() {
             skippable_grimoire
         );
 
+        input_dirs.push(corpus_dir.clone());
+        log::debug!("Loading initial inputs from {:?}", &input_dirs);
+        // Load from disk
+        state
+            .load_initial_inputs(&mut fuzzer, &mut executor, &mut mgr, &input_dirs)
+            .unwrap_or_else(|_| panic!("Failed to load initial corpus at {:?}", &input_dirs));
+        log::debug!("We imported {} inputs from disk.", state.corpus().count());
+
         // In case the corpus is empty (on first run), reset
         if state.corpus().count() < 1 {
-            if input_dirs.is_empty() {
-                // Generator of printable bytearrays of max size 32
-                let mut generator =
-                    GeneralizedInputBytesGenerator::from(RandBytesGenerator::new(32));
+            let mut generator = RandBytesGenerator::new(32);
 
-                // Generate 8 initial inputs
-                state
-                    .generate_initial_inputs(
-                        &mut fuzzer,
-                        &mut executor,
-                        &mut generator,
-                        &mut mgr,
-                        8,
-                    )
-                    .expect("Failed to generate the initial corpus");
-                println!(
-                    "We imported {} inputs from the generator.",
-                    state.corpus().count()
-                );
-            } else {
-                println!("Loading from {:?}", &input_dirs);
-                // Load from disk
-                state
-                    .load_initial_inputs(&mut fuzzer, &mut executor, &mut mgr, &input_dirs)
-                    .unwrap_or_else(|_| {
-                        panic!("Failed to load initial corpus at {:?}", &input_dirs)
-                    });
-                println!("We imported {} inputs from disk.", state.corpus().count());
-            }
+            // Generate 8 initial inputs
+            state
+                .generate_initial_inputs(&mut fuzzer, &mut executor, &mut generator, &mut mgr, 128)
+                .expect("Failed to generate the initial corpus");
+            log::debug!(
+                "We imported {} inputs from the generator.",
+                state.corpus().count()
+            );
+        }
+
+        log::debug!(
+            "Starting fuzz loop with {} inputs in the corpus",
+            state.corpus().count()
+        );
+
+        if state.corpus().count() == 0 {
+            log::error!("Failed to load corpus and/or generate initial inputs.");
+            return Err(Error::ShuttingDown);
         }
 
         fuzzer.fuzz_loop(&mut stages, &mut executor, &mut state, &mut mgr)?;
@@ -387,7 +430,11 @@ pub fn main() {
         .cores(&cores)
         .broker_port(broker_port)
         .remote_broker_addr(remote_broker_addr)
-        .stdout_file(Some("/dev/null"))
+        .stdout_file(Some(if opt.show_stdout {
+            "/dev/stdout"
+        } else {
+            "/dev/null"
+        }))
         .build()
         .launch()
     {

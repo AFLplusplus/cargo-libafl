@@ -1,6 +1,6 @@
 [package]
 name = "cargo-libafl"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Andrea Fioraldi <andreafioraldi@gmail.com>"]
 license = "MIT OR Apache-2.0"
 description = "A `cargo` wrapper to fuzz Rust code with `LibAFL`"
@@ -28,3 +28,7 @@ toml = "0.5.9"
 cargo-binutils = "0.3.6"
 rustc_version = "0.4"
 xdg = "2.4"
+
+[features]
+sancov_8bit = []
+tui = []

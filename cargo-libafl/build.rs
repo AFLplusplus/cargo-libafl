@@ -47,10 +47,15 @@ fn main() {
     fs::copy(rt_path.join("runtime.rs"), out_path.join("runtime.rs"))
         .expect("Couldn't copy runtime.rs");
 
-    assert!(Command::new("cargo")
-        .current_dir(&out_path)
+    let mut cmd = Command::new("cargo");
+    cmd.current_dir(&out_path)
         .env("CARGO_TARGET_DIR", out_path.join("rt"))
-        .arg("build")
+        .arg("build");
+    #[cfg(feature = "sancov_8bit")]
+    cmd.arg("--features").arg("sancov_8bit");
+    #[cfg(feature = "tui")]
+    cmd.arg("--features").arg("tui");
+    assert!(cmd
         .arg(&format!("--manifest-path={}/Cargo.toml", out_dir))
         .arg("--release")
         .status()

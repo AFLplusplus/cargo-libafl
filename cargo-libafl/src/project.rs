@@ -163,9 +163,16 @@ impl FuzzProject {
             cmd.arg("-Z").arg("build-std");
         }
 
+        #[cfg(feature = "sancov_8bit")]
         let mut rustflags: String = "-Cpasses=sancov-module \
                                      -Cllvm-args=-sanitizer-coverage-level=4 \
                                      -Cllvm-args=-sanitizer-coverage-inline-8bit-counters \
+                                     -Cllvm-args=-sanitizer-coverage-pc-table"
+            .to_owned();
+        #[cfg(not(feature = "sancov_8bit"))]
+        let mut rustflags: String = "-Cpasses=sancov-module \
+                                     -Cllvm-args=-sanitizer-coverage-level=4 \
+                                     -Cllvm-args=-sanitizer-coverage-trace-pc-guard \
                                      -Cllvm-args=-sanitizer-coverage-pc-table"
             .to_owned();
 
@@ -264,8 +271,11 @@ impl FuzzProject {
             cmd.arg("--target-dir").arg(target_dir);
         }
 
-        let artifact_arg = ffi::OsString::from(self.artifacts_for(fuzz_target)?);
-        cmd.arg("--").arg("--output").arg(artifact_arg);
+        cmd.arg("--")
+            .arg("--corpus")
+            .arg(self.corpus_for(fuzz_target)?)
+            .arg("--crashes")
+            .arg(self.artifacts_for(fuzz_target)?);
 
         Ok(cmd)
     }

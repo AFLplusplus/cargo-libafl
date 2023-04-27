@@ -13,11 +13,15 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "7ed1ac9" }
-libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "7ed1ac9", features = ["sancov_8bit", "sancov_cmplog"] }
+libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "8ff8ae41f1ed2956bb1e906c5c7bd0505ca110c0" }
+libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "8ff8ae41f1ed2956bb1e906c5c7bd0505ca110c0", features = ["sancov_8bit", "sancov_pcguard",
+"sancov_cmplog", "pointer_maps"] }
+
 mimalloc = { version = "*", default-features = false }
 portpicker = "0.1.1"
 clap = { version = "4.0", features = ["derive"] }
+env_logger = "0.10"
+log = "*"
 
 [profile.release]
 lto = true
@@ -28,3 +32,7 @@ debug = true
 [lib]
 crate-type = ["staticlib", "rlib"]
 path = "runtime.rs"
+
+[features]
+sancov_8bit = []
+tui = []
