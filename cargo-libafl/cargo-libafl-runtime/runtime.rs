@@ -16,7 +16,7 @@ use libafl::{
         rands::StdRand,
         shmem::{ShMemProvider, StdShMemProvider},
         tuples::{tuple_list, Merge},
-        AsSlice,
+        AsMutSlice, AsSlice,
     },
     corpus::{self, CachedOnDiskCorpus, Corpus, OnDiskCorpus},
     events::EventConfig,
@@ -36,6 +36,7 @@ use libafl::{
         StdMOptMutator,
     },
     observers::{BacktraceObserver, TimeObserver},
+    prelude::OwnedMutSlice,
     schedulers::{
         powersched::PowerSchedule, IndexesLenTimeMinimizerScheduler, PowerQueueScheduler,
     },
@@ -218,9 +219,8 @@ pub fn main() {
 
         #[cfg(feature = "sancov_8bit")]
         let edges_observer = {
-            let edges = unsafe { &mut COUNTERS_MAPS };
-            // TODO: is the call to edges.clone here the reason for breaking sancov_8bit?
-            HitcountsIterableMapObserver::new(MultiMapObserver::new("edges", edges.clone()))
+            let edges = unsafe { COUNTERS_MAPS.drain(0..).collect() };
+            HitcountsIterableMapObserver::new(MultiMapObserver::new("edges", edges))
         };
 
         #[cfg(not(feature = "sancov_8bit"))]

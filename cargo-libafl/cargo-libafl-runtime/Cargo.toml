@@ -33,5 +33,6 @@ crate-type = ["staticlib", "rlib"]
 path = "runtime.rs"
 
 [features]
+default = [ "sancov_8bit" ]
 sancov_8bit = []
 tui = []

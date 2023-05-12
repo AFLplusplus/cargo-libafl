@@ -51,6 +51,7 @@ fn main() {
     cmd.current_dir(&out_path)
         .env("CARGO_TARGET_DIR", out_path.join("rt"))
         .arg("build");
+    cmd.arg("--no-default-features");
     #[cfg(feature = "sancov_8bit")]
     cmd.arg("--features").arg("sancov_8bit");
     #[cfg(feature = "tui")]

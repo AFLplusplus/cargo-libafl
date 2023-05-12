@@ -30,5 +30,6 @@ rustc_version = "0.4"
 xdg = "2.4"
 
 [features]
+default = ["sancov_8bit"]
 sancov_8bit = []
 tui = []
