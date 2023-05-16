@@ -235,6 +235,14 @@ pub fn main() {
 
         #[cfg(feature = "sancov_8bit")]
         let edges_observer = {
+            // libAFL 0.10
+            // let edges = unsafe {
+            //     COUNTERS_MAPS
+            //         .drain(0..)
+            //         .map(|x| OwnedMutSlice::from_raw_parts_mut(x.as_mut_ptr(), x.len()))
+            //         .collect()
+            // };
+            // libAFL git
             let edges = unsafe { COUNTERS_MAPS.drain(0..).collect() };
             HitcountsIterableMapObserver::new(MultiMapObserver::new("edges", edges))
         };
