@@ -41,8 +41,8 @@ use libafl::{
         powersched::PowerSchedule, IndexesLenTimeMinimizerScheduler, PowerQueueScheduler,
     },
     stages::{
-        calibrate::CalibrationStage, logics::IfElseStage, GeneralizationStage, StdMutationalStage,
-        StdPowerMutationalStage, TracingStage,
+        calibrate::CalibrationStage, logics::IfElseStage, GeneralizationStage, MapEqualityFactory,
+        StdMutationalStage, StdPowerMutationalStage, StdTMinMutationalStage, TracingStage,
     },
     state::{HasCorpus, HasMetadata, StdState},
     Error,
@@ -143,6 +143,22 @@ struct Opt {
         default_value_t = false
     )]
     grimoire: bool,
+
+    #[arg(
+        short = 'm',
+        long,
+        help = "Enable \"tmin\" minimization stage.",
+        name = "MINIMIZE",
+        default_value_t = false
+    )]
+    minimize: bool,
+
+    #[arg(
+        long,
+        help = "Number of runs for the minimization stage.",
+        default_value_t = 512
+    )]
+    minimizer_runs: usize,
 }
 
 extern "C" {
@@ -238,6 +254,8 @@ pub fn main() {
             unsafe { &mut BACKTRACE },
             libafl::observers::HarnessType::InProcess,
         );
+
+        let map_eq_factory = MapEqualityFactory::with_observer(&edges_observer);
 
         // New maximization map feedback linked to the edges observer
         let map_feedback = MaxMapFeedback::tracking(&edges_observer, true, true);
@@ -355,6 +373,16 @@ pub fn main() {
             tuple_list!(),
         );
 
+        let tmin_enabled: bool = opt.minimize.into();
+        let minimizer_mutations = StdScheduledMutator::new(havoc_mutations());
+        let minimizer =
+            StdTMinMutationalStage::new(minimizer_mutations, map_eq_factory, opt.minimizer_runs);
+        let skippable_minimizer = IfElseStage::new(
+            |_, _, _, _, _| Ok(tmin_enabled),
+            tuple_list!(minimizer),
+            tuple_list!(),
+        );
+
         // Create the executor for an in-process function with one observer for edge coverage and one for the execution time
         let mut executor = TimeoutExecutor::new(
             InProcessExecutor::new(
@@ -383,6 +411,7 @@ pub fn main() {
             tracing,
             i2s,
             power,
+            skippable_minimizer,
             skippable_grimoire
         );
 
