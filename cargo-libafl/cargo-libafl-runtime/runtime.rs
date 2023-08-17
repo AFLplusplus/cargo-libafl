@@ -10,6 +10,8 @@ use std::{env, fs, net::SocketAddr, path::PathBuf};
 use std::{fs::File, io};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::io::Write;
+#[cfg(unix)]
+use nix::{self, unistd::dup};
 
 use libafl::{
     bolts::{
