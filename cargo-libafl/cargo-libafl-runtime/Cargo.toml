@@ -18,7 +18,7 @@ libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "7ed
 mimalloc = { version = "*", default-features = false }
 portpicker = "0.1.1"
 clap = { version = "4.0", features = ["derive"] }
-nix = { version = "0.26.2 }
+nix = { version = "0.26.2" }
 
 [profile.release]
 lto = true
