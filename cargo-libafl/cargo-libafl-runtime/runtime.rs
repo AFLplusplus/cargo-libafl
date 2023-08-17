@@ -8,6 +8,7 @@ use clap::{self, Parser};
 use core::time::Duration;
 use std::{env, fs, net::SocketAddr, path::PathBuf};
 use std::{fs::File, io};
+use std::os::fd::{AsRawFd, FromRawFd};
 
 use libafl::{
     bolts::{
@@ -187,7 +188,7 @@ pub fn main() {
 
     #[cfg(unix)]
     let mut stdout_cpy = unsafe {
-        let new_fd = dup(io::stdout().as_raw_fd())?;
+        let new_fd = dup(io::stdout().as_raw_fd()).unwrap();
         File::from_raw_fd(new_fd)
     };
 
