@@ -9,6 +9,7 @@ use core::time::Duration;
 use std::{env, fs, net::SocketAddr, path::PathBuf};
 use std::{fs::File, io};
 use std::os::fd::{AsRawFd, FromRawFd};
+use std::io::Write;
 
 use libafl::{
     bolts::{
