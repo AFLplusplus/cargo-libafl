@@ -31,7 +31,7 @@ use libafl::{
     fuzzer::{Fuzzer, StdFuzzer},
     generators::RandBytesGenerator,
     inputs::HasTargetBytes,
-    monitors::SimpleMonitor,
+    monitors::MultiMonitor,
     mutators::{
         grimoire::{
             GrimoireExtensionMutator, GrimoireRandomDeleteMutator,
@@ -189,19 +189,7 @@ pub fn main() {
 
     let shmem_provider = StdShMemProvider::new().expect("Failed to init shared memory");
 
-    #[cfg(unix)]
-    let mut stdout_cpy = unsafe {
-        let new_fd = dup(io::stdout().as_raw_fd()).unwrap();
-        File::from_raw_fd(new_fd)
-    };
-
-    // 'While the monitor are state, they are usually used in the broker - which is likely never restarted
-    let monitor = SimpleMonitor::new(|s| {
-        #[cfg(unix)]
-        writeln!(&mut stdout_cpy, "{s}").unwrap();
-        #[cfg(windows)]
-        println!("{s}");
-    });
+    let monitor = MultiMonitor::new(|s| println!("{s}"));
 
     let mut run_client = |state: Option<StdState<_, _, _, _>>, mut mgr, _core_id| {
         // Create an observation channel using the coverage map
