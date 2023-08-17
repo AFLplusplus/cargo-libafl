@@ -19,6 +19,7 @@ mimalloc = { version = "*", default-features = false }
 portpicker = "0.1.1"
 clap = { version = "4.0", features = ["derive"] }
 nix = { version = "0.26.2 }
+
 [profile.release]
 lto = true
 codegen-units = 1
