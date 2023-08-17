@@ -7,6 +7,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 use clap::{self, Parser};
 use core::time::Duration;
 use std::{env, fs, net::SocketAddr, path::PathBuf};
+use std::{fs::File, io};
 
 use libafl::{
     bolts::{
@@ -189,8 +190,6 @@ pub fn main() {
         let new_fd = dup(io::stdout().as_raw_fd())?;
         File::from_raw_fd(new_fd)
     };
-    #[cfg(unix)]
-    let file_null = File::open("/dev/null")?;
 
     // 'While the monitor are state, they are usually used in the broker - which is likely never restarted
     let monitor = SimpleMonitor::new(|s| {
