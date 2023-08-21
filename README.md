@@ -1,5 +1,7 @@
 # cargo-libafl
 
+**This repository is outdated. It is superseded by [libafl_libfuzzer](https://github.com/AFLplusplus/LibAFL/pull/981)!**
+
 This cargo utility is a replacement for (and a fork of) [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) to use a LibAFL-based fuzzer instead of libfuzzer.
 
 The available features are still behind the original cargo-fuzz.
