@@ -5,19 +5,24 @@ name = "cargo-libafl-runtime"
 # 13.3.7 is a dummy value for templating purposes, it will be replaced with the actual version by ../build.rs
 version = "13.3.7"
 authors = ["Andrea Fioraldi <andreafioraldi@gmail.com>"]
-license = "MIT OR Apache-2.0"
-description = "The runtime lib for cargo-libafl"
-repository = "https://github.com/AFLplusplus/cargo-libafl"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/AFLplusplus/cargo-libafl"
+description = "The runtime lib for cargo-libafl"
 
 [workspace]
 
 [dependencies]
-libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "7ed1ac9" }
-libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "7ed1ac9", features = ["sancov_8bit", "sancov_cmplog"] }
+libafl = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "6d2284d" }
+libafl_targets = { git = "https://github.com/AFLplusplus/LibAFL.git", rev = "6d2284d", features = ["sancov_8bit", "sancov_pcguard", "sancov_cmplog", "pointer_maps"] }
+# libafl = "0.10"
+# libafl_targets = { version = "0.10", features = ["sancov_8bit", "sancov_pcguard", "sancov_cmplog", "pointer_maps"] }
+
+clap = { version = "4.0", features = ["derive"] }
+env_logger = "0.10"
+log = "*"
 mimalloc = { version = "*", default-features = false }
 portpicker = "0.1.1"
-clap = { version = "4.0", features = ["derive"] }
 
 [profile.release]
 lto = true
@@ -28,3 +33,8 @@ debug = true
 [lib]
 crate-type = ["staticlib", "rlib"]
 path = "runtime.rs"
+
+[features]
+default = [ "sancov_8bit" ]
+sancov_8bit = []
+tui = []
