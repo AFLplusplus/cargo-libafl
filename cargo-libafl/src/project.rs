@@ -159,7 +159,9 @@ impl FuzzProject {
         for flag in &build.unstable_flags {
             cmd.arg("-Z").arg(flag);
         }
-        if let Sanitizer::Memory = build.sanitizer {
+        if (matches!(build.sanitizer, Sanitizer::Memory) || build.build_std || build.careful_mode)
+            && !build.coverage
+        {
             cmd.arg("-Z").arg("build-std");
         }
 
@@ -202,8 +204,11 @@ impl FuzzProject {
         if build.triple.contains("-linux-") {
             rustflags.push_str(" -Cllvm-args=-sanitizer-coverage-stack-depth");
         }
-        if !build.release || build.debug_assertions {
-            rustflags.push_str(" -Cdebug-assertions");
+        if build.careful_mode {
+            rustflags.push_str(" -Zextra-const-ub-checks -Zstrict-init-checks --cfg careful");
+        }
+        if !build.release || build.debug_assertions || build.careful_mode {
+            rustflags.push_str(" -Cdebug-assertions=on");
         }
         if build.triple.contains("-msvc") {
             // The entrypoint is in the bundled libfuzzer rlib, this gets the linker to find it.

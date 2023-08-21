@@ -98,6 +98,19 @@ pub struct BuildOptions {
     /// Use a specific sanitizer
     pub sanitizer: Sanitizer,
 
+    #[clap(long = "build-std")]
+    /// Pass `-Zbuild-std` to cargo to build the standard library with the same build settings as
+    /// the fuzz target, such as debug assertions and sanitizers. This allows to identify a more
+    /// diverse set of bugs. But beware, some sanitizers might cause false alarms with the standard
+    /// library (e.g., thread sanitizer). Currently this conflicts with source-based coverage
+    /// instrumentation.
+    pub build_std: bool,
+
+    #[clap(short, long = "careful")]
+    /// enable "careful" mode: inspired by https://github.com/RalfJung/cargo-careful, this enables building the
+    /// standard library (implies --build-std) with debug assertions and extra const UB and init checks.
+    pub careful_mode: bool,
+
     #[clap(
         name = "triple",
         long = "target",
@@ -229,6 +242,8 @@ mod test {
             no_default_features: false,
             all_features: false,
             features: None,
+            build_std: false,
+            careful_mode: false,
             sanitizer: Sanitizer::Address,
             triple: String::from(crate::utils::default_target()),
             unstable_flags: Vec::new(),
